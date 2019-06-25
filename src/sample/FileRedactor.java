@@ -1,0 +1,191 @@
+package sample;
+
+import java.io.*;
+import java.util.Calendar;
+
+public class FileRedactor {
+
+    //private static Main main = new Main();
+    public static String patch;
+    public static String outputFileName;
+    public static String inputFileFoolPatch;
+    public static String outputFileFoolPatch;
+    static String fileDate;
+    static String fileTime;
+    public static boolean licOk = false;
+
+    String sourceFile;
+
+    void fileRedactor() throws IOException {
+
+        File openFile = new File(Main.inputFilePatch);
+        patch = openFile.getAbsolutePath();
+
+        BufferedReader bReader = new BufferedReader(new FileReader(openFile));
+        inputFileFoolPatch = patch.substring(0, patch.lastIndexOf("\\"));
+        outputFileName = patch.substring(patch.lastIndexOf("\\"), patch.lastIndexOf("."));
+        //outputFileName = setNextFileName();
+        outputFileFoolPatch = inputFileFoolPatch + outputFileName + ""; // расширение файла (*.nc)
+        BufferedWriter bWriter = new BufferedWriter(new FileWriter(outputFileFoolPatch));
+
+        String line = "";
+        String fileContentHead = "";
+        String fileContent = "";
+        String LS = System.getProperty("line.separator");
+        String clear = "(                               )"; //Довжина рядку
+        char[] chars = new char[1];
+        String newLine = "";
+        String oldLine = "";
+        int count = 1;
+
+//        dateAndTime();
+
+        while (count <= 3) {
+            line = bReader.readLine();
+            switch (count) {
+                case 2:
+                    sourceFile = line.substring(line.indexOf("(") + 1, line.indexOf(")"));
+                    break;
+            }
+            fileContentHead += line + LS;
+            count++;
+        }
+
+        count = 1;
+
+        //Запис шапки
+        bWriter.write(fileContentHead + LS);
+
+        if (!licOk) bWriter.write("(    LICENSE ERROR!    )\n");
+
+        // Створення змісту
+        while ((line = bReader.readLine()) != null) {
+
+            if (licOk) {
+                //Пошук назви операції
+                if (line.startsWith("(#")) {
+                    chars = clear.toCharArray();    //Clear array
+                    line.getChars(2, line.length(), chars, chars.length - line.length() + 2);
+                }
+
+                //Пошук назви та номеру інструменту
+                if (line.startsWith("N") || line.startsWith("M30")) {
+                    if (line.startsWith("N")) {
+                        String tool = line.substring(line.indexOf("T") + 1, line.indexOf("T") + 5);
+                        String oldTool = tool;
+                        tool = toolErrorMessage(tool);                          // Якщо номер інструменту помилковий - змінити, якщо потрібно
+                        if (!oldTool.equals(tool)) {                              // Якщо номер інтсрументу був виправлений - заміна
+                            line = line.replace(oldTool, tool);
+                        }
+                        tool.getChars(0, 4, chars, 1);                                  //Додання № инструменту в масив
+                        line.getChars(line.indexOf("T") + 7, line.length() - 1, chars, 6);  //Додання імені инструменту в масив
+                        newLine = String.valueOf(chars);
+                    }
+                    if (line.startsWith("M30")) newLine = "";
+
+                    if (!oldLine.equals(newLine)) {
+                        if (count != 1) {
+                            String tmp = oldLine.substring(oldLine.lastIndexOf("   ")
+                                    + 3, oldLine.length() - 1)
+                                    + (" x " + count + ")");
+                            oldLine = oldLine.substring(0, oldLine.length() - tmp.length()) + tmp;
+                            count = 1;
+                        }
+
+                        if (!oldLine.isEmpty()) {
+                            System.out.println(oldLine);               //Запис рядку в консоль
+                            bWriter.write(oldLine + LS);            //Запис рядку в файл
+                        }
+
+                        oldLine = newLine;
+                    } else {
+                        count++;
+                    }
+                }
+            }
+
+            fileContent = fileContent + line + LS;
+
+        }
+
+        System.out.println(oldLine);
+        //bWriter.write(oldLine);
+        bWriter.write(fileContent);
+        //  bWriter.write("Source file: " + sourceFile + ".esp");
+        //  bWriter.write(LS + fileDate + fileTime);
+        bReader.close();
+        bWriter.close();
+
+        //openFile.delete();
+
+
+        writeTempFile(sourceFile + "|" + fileDate + "|" + inputFileFoolPatch.substring(0, inputFileFoolPatch.length() - 1) + sourceFile + ".esp" + LS);
+        //System.out.println(sourceFile + "|" + fileDate + "|" + inputFileFoolPatch +  sourceFile + ".esp");
+
+    }
+
+    private static void writeTempFile(String projectNC) {
+        try {
+            FileWriter tempFileWriter = new FileWriter(Main.tempDB, true);
+            tempFileWriter.write(projectNC);
+            tempFileWriter.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Показує діалог якщо був знайдений невірний номер інструменту та змінює його за потребою
+    private static String toolErrorMessage(String s) {
+        char[] ch = s.toCharArray();
+        if (ch[0] == ch[2] && ch[1] == ch[3]) {
+            return s;
+        } else {
+            System.out.print(s);
+            if (Dialog.confirmBox("Можливо інструмент " + s + " невірний, виправити його?", "Помилка інструменту " + s)) {
+                //System.out.println(ch);
+                for (int i = 0; i < 2; i++) {
+                    char index = ch[i];
+                    ch[2 + i] = index;
+                }
+                s = String.valueOf(ch);
+                System.out.println(" change to " + s);
+            } else {
+                // ... користувач вибрав NO, CANCEL, або закрив діалог
+            }
+            return s;
+        }
+    }
+
+    //Дата та час (не використовується)
+    private static void dateAndTime() {
+        //  (01.08.2018 15:33:35)
+        Calendar c = Calendar.getInstance();
+        fileTime = String.format("%tT", c);
+        fileDate = String.format("%ta %td.%tm.%ty", c, c, c, c);
+        System.out.printf("Date: %ta %td.%tm.%ty p.%n", c, c, c, c);
+        System.out.printf("Time: %tT%n", c);
+    }
+
+    // Генерує им'я файлу більше на один від найбільшого (до 1000) (не використовується)
+    private static String setNextFileName() {
+
+        File folder = new File(inputFileFoolPatch);
+        File[] listOfFiles = folder.listFiles();
+        String fileName;
+        int j, k = 0;
+
+        for (int i = 0; i < listOfFiles.length; i++) {
+            if (listOfFiles[i].isFile()) {
+                j = Integer.valueOf(listOfFiles[i].getName().toUpperCase().replaceAll("[^0-9]", ""));
+                if (j > 999)
+                    j = 0;
+                if (k < j)
+                    k = j;
+            } else if (listOfFiles[i].isDirectory()) {
+                //System.out.println("Directory " + listOfFiles[i].getName());
+            }
+        }
+        fileName = String.format("\\O%04d", k + 1);
+        return fileName;
+    }
+}
